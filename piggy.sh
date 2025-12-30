@@ -289,8 +289,7 @@ response-origin-only-with-rfc5780
 listening-port=3478
 tls-listening-port=5349
 
-listening-ip=$SERVER_IP
-relay-ip=$SERVER_IP
+listening-ip=0.0.0.0
 external-ip=$SERVER_IP
 
 realm=$DOMAIN_CHAT
