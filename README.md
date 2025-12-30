@@ -43,4 +43,6 @@ Prompts for domains and IP addresses, handling all configuration files automatic
 Run the following command on your server to start the installation:
 
 ```bash
-sudo bash <(curl -s https://raw.githubusercontent.com/piggyteam99/piggychat/main/piggy.sh)
+wget https://raw.githubusercontent.com/piggyteam99/piggychat/main/piggy.sh
+chmod +x piggy.sh
+sudo ./piggy.sh
