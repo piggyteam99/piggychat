@@ -326,7 +326,7 @@ turn_uris:
 
 turn_shared_secret: "$TURN_SECRET"
 turn_user_lifetime: 86400000
-turn_allow_guests: true
+turn_allow_guests: false
 EOF
 
 systemctl restart matrix-synapse
