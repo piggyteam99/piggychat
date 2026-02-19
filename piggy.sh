@@ -1,4 +1,3 @@
-```bash
 #!/bin/bash
 
 # توقف اسکریپت در صورت بروز خطا
@@ -8,130 +7,114 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # چک کردن دسترسی روت
-if [ "$EUID" -ne 0 ]; then 
+if [ "$EUID" -ne 0 ]; then
   echo -e "${RED}لطفاً اسکریپت را با دسترسی root اجرا کنید (sudo).${NC}"
   exit
 fi
 
-# --- توابع کمکی ---
+clear
+echo -e "${GREEN}======================================================${NC}"
+echo -e "${GREEN}    Matrix (Synapse) + Element + Coturn Installer     ${NC}"
+echo -e "${GREEN}    (Auto-Update Element Version & Advanced Menu)     ${NC}"
+echo -e "${GREEN}======================================================${NC}"
+echo ""
 
-show_menu() {
-    clear
-    echo -e "${GREEN}======================================================${NC}"
-    echo -e "${GREEN}       Matrix (Synapse) + Element + Coturn Menu       ${NC}"
-    echo -e "${GREEN}======================================================${NC}"
-    echo ""
-    echo -e "${YELLOW}لطفاً یک گزینه را انتخاب کنید:${NC}"
-    echo ""
-    echo -e "  ${BLUE}1)${NC} نصب کامل سرور (Install)"
-    echo -e "  ${BLUE}2)${NC} تنظیم توکن ثبت نام (Set Registration Token)"
-    echo -e "  ${BLUE}3)${NC} حذف کامل نصب (Uninstall)"
-    echo -e "  ${BLUE}0)${NC} خروج"
-    echo ""
-    read -p "انتخاب شما [0-3]: " choice
-}
+# ==========================================
+# تابع 1: نصب کامل (کدهای اصلی شما)
+# ==========================================
+install_all() {
+  # --- دریافت اطلاعات از کاربر ---
 
-# --- گزینه 1: نصب کامل ---
-do_install() {
-    clear
-    echo -e "${GREEN}======================================================${NC}"
-    echo -e "${GREEN}    Matrix (Synapse) + Element + Coturn Installer     ${NC}"
-    echo -e "${GREEN}    (Auto-Update Element Version)                     ${NC}"
-    echo -e "${GREEN}======================================================${NC}"
-    echo ""
+  echo -e "${YELLOW}مرحله 1: دریافت اطلاعات دامنه و سرور${NC}"
 
-    # --- دریافت اطلاعات از کاربر ---
-    echo -e "${YELLOW}مرحله 1: دریافت اطلاعات دامنه و سرور${NC}"
+  read -p "لطفاً دامنه اصلی را وارد کنید (مثلاً example.com): " DOMAIN_ROOT
+  read -p "لطفاً ساب‌دامین چت را وارد کنید (مثلاً chat.$DOMAIN_ROOT): " DOMAIN_CHAT
+  read -p "لطفاً ساب‌دامین المنت را وارد کنید (مثلاً app.$DOMAIN_ROOT): " DOMAIN_APP
+  read -p "آدرس IP پابلیک سرور را وارد کنید: " SERVER_IP
+  read -p "ایمیل خود را برای دریافت گواهی SSL وارد کنید: " EMAIL_ADDR
 
-    read -p "لطفاً دامنه اصلی را وارد کنید (مثلاً example.com): " DOMAIN_ROOT
-    read -p "لطفاً ساب‌دامین چت را وارد کنید (مثلاً chat.$DOMAIN_ROOT): " DOMAIN_CHAT
-    read -p "لطفاً ساب‌دامین المنت را وارد کنید (مثلاً app.$DOMAIN_ROOT): " DOMAIN_APP
-    read -p "آدرس IP پابلیک سرور را وارد کنید: " SERVER_IP
-    read -p "ایمیل خود را برای دریافت گواهی SSL وارد کنید: " EMAIL_ADDR
+  echo ""
+  echo -e "اطلاعات وارد شده:"
+  echo -e "Root Domain: ${GREEN}$DOMAIN_ROOT${NC}"
+  echo -e "Chat Domain: ${GREEN}$DOMAIN_CHAT${NC}"
+  echo -e "App Domain:  ${GREEN}$DOMAIN_APP${NC}"
+  echo -e "Server IP:   ${GREEN}$SERVER_IP${NC}"
+  echo -e "Email:       ${GREEN}$EMAIL_ADDR${NC}"
+  echo ""
 
-    echo ""
-    echo -e "اطلاعات وارد شده:"
-    echo -e "Root Domain: ${GREEN}$DOMAIN_ROOT${NC}"
-    echo -e "Chat Domain: ${GREEN}$DOMAIN_CHAT${NC}"
-    echo -e "App Domain:  ${GREEN}$DOMAIN_APP${NC}"
-    echo -e "Server IP:   ${GREEN}$SERVER_IP${NC}"
-    echo -e "Email:       ${GREEN}$EMAIL_ADDR${NC}"
-    echo ""
+  read -p "آیا اطلاعات بالا صحیح است؟ (y/n): " CONFIRM
+  if [[ $CONFIRM != "y" ]]; then
+      echo -e "${RED}نصب لغو شد.${NC}"
+      exit 1
+  fi
 
-    read -p "آیا اطلاعات بالا صحیح است؟ (y/n): " CONFIRM
-    if [[ $CONFIRM != "y" ]]; then
-        echo -e "${RED}نصب لغو شد.${NC}"
-        return
-    fi
+  # --- آپدیت و نصب پیش‌نیازها ---
+  echo -e "${YELLOW}\nمرحله 2: آپدیت سیستم و نصب پیش‌نیازها...${NC}"
+  apt update
+  apt install -y curl wget gnupg lsb-release nginx certbot python3-certbot-nginx coturn
 
-    # --- آپدیت و نصب پیش‌نیازها ---
-    echo -e "${YELLOW}\nمرحله 2: آپدیت سیستم و نصب پیش‌نیازها...${NC}"
-    apt update
-    apt install -y curl wget gnupg lsb-release nginx certbot python3-certbot-nginx coturn acl
+  # --- نصب Synapse ---
+  echo -e "${YELLOW}\nمرحله 3: نصب Synapse...${NC}"
+  wget -qO /usr/share/keyrings/matrix-org-archive-keyring.gpg https://packages.matrix.org/debian/matrix-org-archive-keyring.gpg      
 
-    # --- نصب Synapse ---
-    echo -e "${YELLOW}\nمرحله 3: نصب Synapse...${NC}"
-    wget -qO /usr/share/keyrings/matrix-org-archive-keyring.gpg https://packages.matrix.org/debian/matrix-org-archive-keyring.gpg      
+  echo "deb [signed-by=/usr/share/keyrings/matrix-org-archive-keyring.gpg] \
+  https://packages.matrix.org/debian/       $(lsb_release -cs) main" \
+  | tee /etc/apt/sources.list.d/matrix-org.list
 
-    echo "deb [signed-by=/usr/share/keyrings/matrix-org-archive-keyring.gpg] \
-https://packages.matrix.org/debian/       $(lsb_release -cs) main" \
-    | tee /etc/apt/sources.list.d/matrix-org.list
+  apt update
+  apt install -y matrix-synapse-py3
 
-    apt update
-    apt install -y matrix-synapse-py3
+  # --- کانفیگ Registration ---
+  echo -e "${YELLOW}\nمرحله 4: تنظیم Registration Shared Secret...${NC}"
+  # تولید خودکار کد مخفی
+  REG_SECRET=$(openssl rand -hex 32)
+  echo -e "Secret تولید شده: ${GREEN}$REG_SECRET${NC}"
 
-    # --- کانفیگ Registration ---
-    echo -e "${YELLOW}\nمرحله 4: تنظیم Registration Shared Secret...${NC}"
-    # تولید خودکار کد مخفی
-    REG_SECRET=$(openssl rand -hex 32)
-    echo -e "Secret تولید شده: ${GREEN}$REG_SECRET${NC}"
-
-    cat <<EOF > /etc/matrix-synapse/conf.d/registration.yaml
+cat <<EOF > /etc/matrix-synapse/conf.d/registration.yaml
 enable_registration: true
 enable_registration_without_verification: true
 registration_shared_secret: "$REG_SECRET"
 EOF
 
-    # --- ریستارت و ساخت یوزر ادمین ---
-    echo -e "${YELLOW}\nمرحله 5: راه‌اندازی سرویس و ساخت یوزر ادمین...${NC}"
-    systemctl restart matrix-synapse
+  # --- ریستارت و ساخت یوزر ادمین ---
+  echo -e "${YELLOW}\nمرحله 5: راه‌اندازی سرویس و ساخت یوزر ادمین...${NC}"
+  systemctl restart matrix-synapse
 
-    echo -e "${GREEN}اکنون باید یک یوزر ادمین بسازید.${NC}"
-    echo -e "${YELLOW}توجه: وقتی از شما خواسته شد، یک نام کاربری و رمز عبور وارد کنید و برای گزینه Admin عدد 1 (Yes) را بزنید.${NC}"
-    read -p "برای شروع ساخت یوزر ادمین اینتر بزنید..." DUMMY
+  echo -e "${GREEN}اکنون باید یک یوزر ادمین بسازید.${NC}"
+  echo -e "${YELLOW}توجه: وقتی از شما خواسته شد، یک نام کاربری و رمز عبور وارد کنید و برای گزینه Admin عدد 1 (Yes) را بزنید.${NC}"
+  read -p "برای شروع ساخت یوزر ادمین اینتر بزنید..." DUMMY
 
-    register_new_matrix_user -c /etc/matrix-synapse/conf.d/registration.yaml http://localhost:8008
+  register_new_matrix_user -c /etc/matrix-synapse/conf.d/registration.yaml http://localhost:8008
 
-    # --- دریافت SSL ---
-    echo -e "${YELLOW}\nمرحله 6: دریافت گواهی SSL...${NC}"
-    systemctl stop nginx
+  # --- دریافت SSL ---
+  echo -e "${YELLOW}\nمرحله 6: دریافت گواهی SSL...${NC}"
+  systemctl stop nginx
 
-    # نکته: دامین چت اولین دامین است تا مسیر سرتیفیکیت بر اساس آن ساخته شود
-    certbot certonly --standalone \
-      --non-interactive --agree-tos -m "$EMAIL_ADDR" \
-      -d "$DOMAIN_CHAT" \
-      -d "$DOMAIN_APP" \
-      -d "$DOMAIN_ROOT"
+  # نکته: دامین چت اولین دامین است تا مسیر سرتیفیکیت بر اساس آن ساخته شود
+  certbot certonly --standalone \
+    --non-interactive --agree-tos -m "$EMAIL_ADDR" \
+    -d "$DOMAIN_CHAT" \
+    -d "$DOMAIN_APP" \
+    -d "$DOMAIN_ROOT"
 
-    # --- تنظیم دسترسی‌های SSL برای Coturn (تغییر جدید) ---
-    echo -e "${YELLOW}\nمرحله 6.5: تنظیم دسترسی‌های SSL برای Coturn...${NC}"
-    setfacl -m u:turnserver:x /etc/letsencrypt
-    setfacl -m u:turnserver:x /etc/letsencrypt/live
-    setfacl -m u:turnserver:x /etc/letsencrypt/archive
-    setfacl -R -m u:turnserver:r /etc/letsencrypt/live/
-    setfacl -R -m u:turnserver:r /etc/letsencrypt/archive/
-    echo -e "${GREEN}دسترسی‌های SSL با موفقیت اعمال شد.${NC}"
+  systemctl start nginx
 
-    systemctl start nginx
+  # تنظیم دسترسی SSL برای Coturn (اضافه شده طبق خواسته شما)
+  echo -e "${YELLOW}\nاعمال تنظیمات دسترسی SSL برای تماس‌های صوتی و تصویری (Coturn)...${NC}"
+  apt install -y acl
+  setfacl -m u:turnserver:x /etc/letsencrypt
+  setfacl -m u:turnserver:x /etc/letsencrypt/live
+  setfacl -m u:turnserver:x /etc/letsencrypt/archive
+  setfacl -R -m u:turnserver:r /etc/letsencrypt/live/
+  setfacl -R -m u:turnserver:r /etc/letsencrypt/archive/
 
-    # --- کانفیگ Nginx برای Matrix ---
-    echo -e "${YELLOW}\nمرحله 7: تنظیم Nginx برای Matrix (Synapse)...${NC}"
+  # --- کانفیگ Nginx برای Matrix ---
+  echo -e "${YELLOW}\nمرحله 7: تنظیم Nginx برای Matrix (Synapse)...${NC}"
 
-    cat <<EOF > /etc/nginx/sites-available/matrix.conf
+cat <<EOF > /etc/nginx/sites-available/matrix.conf
 server {
     listen 80;
     server_name $DOMAIN_CHAT;
@@ -156,58 +139,58 @@ server {
 }
 EOF
 
-    ln -s /etc/nginx/sites-available/matrix.conf /etc/nginx/sites-enabled/matrix.conf
+  ln -s /etc/nginx/sites-available/matrix.conf /etc/nginx/sites-enabled/matrix.conf
 
-    # --- نصب Element Web (Dynamic Version) ---
-    echo -e "${YELLOW}\nمرحله 8: نصب Element Web (آخرین نسخه)...${NC}"
-    cd /var/www
+  # --- نصب Element Web (Dynamic Version) ---
+  echo -e "${YELLOW}\nمرحله 8: نصب Element Web (آخرین نسخه)...${NC}"
+  cd /var/www
 
-    if [ ! -d "/var/www/element" ]; then
-        echo "در حال پیدا کردن نسخه آخر..."
+  if [ ! -d "/var/www/element" ]; then
+      echo "در حال پیدا کردن نسخه آخر..."
 
-        # 1. دریافت لینک نهایی (Redirect) صفحه آخرین ورژن
-        REDIRECT_URL=$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/vector-im/element-web/releases/latest)
+      # 1. دریافت لینک نهایی (Redirect) صفحه آخرین ورژن
+      REDIRECT_URL=$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/vector-im/element-web/releases/latest)
 
-        # 2. استخراج نام ورژن از انتهای لینک (مثلاً v1.11.86)
-        VERSION=$(basename "$REDIRECT_URL")
-        echo "نسخه پیدا شد: $VERSION"
+      # 2. استخراج نام ورژن از انتهای لینک (مثلاً v1.11.86)
+      VERSION=$(basename "$REDIRECT_URL")
+      echo "نسخه پیدا شد: $VERSION"
 
-        # 3. ساخت لینک دانلود
-        DOWNLOAD_LINK="https://github.com/vector-im/element-web/releases/download/$VERSION/element-$VERSION.tar.gz"
-        echo "لینک دانلود: $DOWNLOAD_LINK"
+      # 3. ساخت لینک دانلود
+      DOWNLOAD_LINK="https://github.com/vector-im/element-web/releases/download/$VERSION/element-$VERSION.tar.gz"
+      echo "لینک دانلود: $DOWNLOAD_LINK"
 
-        # 4. دانلود فایل
-        wget "$DOWNLOAD_LINK" -O element-latest.tar.gz
+      # 4. دانلود فایل
+      wget "$DOWNLOAD_LINK" -O element-latest.tar.gz
 
-        if [ -f "element-latest.tar.gz" ]; then
-            echo "✅ دانلود با موفقیت انجام شد، در حال اکسترکت..."
-            
-            tar -xvf element-latest.tar.gz > /dev/null
-            
-            # پیدا کردن نام پوشه اکسترکت شده (معمولا element-vX.X.X) و تغییر نام به element
-            EXTRACTED_DIR="element-$VERSION"
-            
-            if [ -d "$EXTRACTED_DIR" ]; then
-                mv "$EXTRACTED_DIR" element
-                echo "✅ پوشه به 'element' تغییر نام یافت."
-            else
-                # اگر فرمت نام پوشه متفاوت بود، اولین پوشه element-* را پیدا کن
-                echo "⚠️ نام پوشه استاندارد نبود، تلاش برای پیدا کردن پوشه..."
-                mv element-v* element 2>/dev/null
-            fi
+      if [ -f "element-latest.tar.gz" ]; then
+          echo "✅ دانلود با موفقیت انجام شد، در حال اکسترکت..."
+          
+          tar -xvf element-latest.tar.gz > /dev/null
+          
+          # پیدا کردن نام پوشه اکسترکت شده (معمولا element-vX.X.X) و تغییر نام به element
+          EXTRACTED_DIR="element-$VERSION"
+          
+          if [ -d "$EXTRACTED_DIR" ]; then
+              mv "$EXTRACTED_DIR" element
+              echo "✅ پوشه به 'element' تغییر نام یافت."
+          else
+              # اگر فرمت نام پوشه متفاوت بود، اولین پوشه element-* را پیدا کن
+              echo "⚠️ نام پوشه استاندارد نبود، تلاش برای پیدا کردن پوشه..."
+              mv element-v* element 2>/dev/null
+          fi
 
-            # پاکسازی فایل فشرده
-            rm element-latest.tar.gz
-        else
-            echo "❌ دانلود انجام نشد. اسکریپت متوقف می‌شود."
-            exit 1
-        fi
-    else
-        echo "پوشه Element از قبل وجود دارد، رد شدن از دانلود..."
-    fi
+          # پاکسازی فایل فشرده
+          rm element-latest.tar.gz
+      else
+          echo "❌ دانلود انجام نشد. اسکریپت متوقف می‌شود."
+          exit 1
+      fi
+  else
+      echo "پوشه Element از قبل وجود دارد، رد شدن از دانلود..."
+  fi
 
-    # تنظیم کانفیگ المنت
-    cat <<EOF > /var/www/element/config.json
+  # تنظیم کانفیگ المنت
+cat <<EOF > /var/www/element/config.json
 {
   "default_server_config": {
     "m.homeserver": {
@@ -226,10 +209,10 @@ EOF
 }
 EOF
 
-    # --- کانفیگ Nginx برای Element ---
-    echo -e "${YELLOW}\nمرحله 9: تنظیم Nginx برای Element...${NC}"
+  # --- کانفیگ Nginx برای Element ---
+  echo -e "${YELLOW}\nمرحله 9: تنظیم Nginx برای Element...${NC}"
 
-    cat <<EOF > /etc/nginx/sites-available/element.conf
+cat <<EOF > /etc/nginx/sites-available/element.conf
 server {
     listen 80;
     server_name $DOMAIN_APP;
@@ -252,13 +235,13 @@ server {
 }
 EOF
 
-    ln -s /etc/nginx/sites-available/element.conf /etc/nginx/sites-enabled/element.conf
+  ln -s /etc/nginx/sites-available/element.conf /etc/nginx/sites-enabled/element.conf
 
-    # --- کانفیگ Nginx برای Well-known ---
-    echo -e "${YELLOW}\nمرحله 10: تنظیم Nginx برای Well-known...${NC}"
+  # --- کانفیگ Nginx برای Well-known ---
+  echo -e "${YELLOW}\nمرحله 10: تنظیم Nginx برای Well-known...${NC}"
 
-    # نام فایل کانفیگ به matrix-wellknown.conf تغییر یافت تا عمومی باشد
-    cat <<EOF > /etc/nginx/sites-available/matrix-wellknown.conf
+  # نام فایل کانفیگ به matrix-wellknown.conf تغییر یافت تا عمومی باشد
+cat <<EOF > /etc/nginx/sites-available/matrix-wellknown.conf
 server {
     listen 80;
     server_name $DOMAIN_ROOT;
@@ -288,29 +271,29 @@ server {
 }
 EOF
 
-    ln -s /etc/nginx/sites-available/matrix-wellknown.conf /etc/nginx/sites-enabled/matrix-wellknown.conf
+  ln -s /etc/nginx/sites-available/matrix-wellknown.conf /etc/nginx/sites-enabled/matrix-wellknown.conf
 
-    # حذف دیفالت و ریلود
-    rm -f /etc/nginx/sites-enabled/default
-    nginx -t && systemctl reload nginx
+  # حذف دیفالت و ریلود
+  rm -f /etc/nginx/sites-enabled/default
+  nginx -t && systemctl reload nginx
 
-    # --- تنظیم coturn ---
-    echo -e "${YELLOW}\nمرحله 11: تنظیم و فعال‌سازی TURN Server (Coturn)...${NC}"
+  # --- تنظیم coturn ---
+  echo -e "${YELLOW}\nمرحله 11: تنظیم و فعال‌سازی TURN Server (Coturn)...${NC}"
 
-    # فعال سازی در دیفالت
-    sed -i 's/#TURNSERVER_ENABLED=1/TURNSERVER_ENABLED=1/g' /etc/default/coturn
-    # اگر کامنت نشده بود و صرفا نبود:
-    if ! grep -q "TURNSERVER_ENABLED=1" /etc/default/coturn; then
-        echo "TURNSERVER_ENABLED=1" >> /etc/default/coturn
-    fi
+  # فعال سازی در دیفالت
+  sed -i 's/#TURNSERVER_ENABLED=1/TURNSERVER_ENABLED=1/g' /etc/default/coturn
+  # اگر کامنت نشده بود و صرفا نبود:
+  if ! grep -q "TURNSERVER_ENABLED=1" /etc/default/coturn; then
+      echo "TURNSERVER_ENABLED=1" >> /etc/default/coturn
+  fi
 
-    # تولید secret برای turn
-    TURN_SECRET=$(openssl rand -hex 32)
-    echo -e "TURN Secret تولید شده: ${GREEN}$TURN_SECRET${NC}"
+  # تولید secret برای turn
+  TURN_SECRET=$(openssl rand -hex 32)
+  echo -e "TURN Secret تولید شده: ${GREEN}$TURN_SECRET${NC}"
 
-    mv /etc/turnserver.conf /etc/turnserver.conf.backup 2>/dev/null || true
+  mv /etc/turnserver.conf /etc/turnserver.conf.backup 2>/dev/null || true
 
-    cat <<EOF > /etc/turnserver.conf
+cat <<EOF > /etc/turnserver.conf
 syslog
 no-rfc5780
 no-stun-backward-compatibility
@@ -344,12 +327,12 @@ no-multicast-peers
 verbose
 EOF
 
-    systemctl restart coturn
+  systemctl restart coturn
 
-    # --- اتصال TURN به Synapse ---
-    echo -e "${YELLOW}\nمرحله 12: معرفی TURN به Synapse...${NC}"
+  # --- اتصال TURN به Synapse ---
+  echo -e "${YELLOW}\nمرحله 12: معرفی TURN به Synapse...${NC}"
 
-    cat <<EOF > /etc/matrix-synapse/conf.d/turn.yaml
+cat <<EOF > /etc/matrix-synapse/conf.d/turn.yaml
 turn_uris:
   - "turn:$DOMAIN_CHAT:3478?transport=udp"
   - "turns:$DOMAIN_CHAT:5349?transport=tcp"
@@ -359,70 +342,60 @@ turn_user_lifetime: 86400000
 turn_allow_guests: false
 EOF
 
-    systemctl restart matrix-synapse
+  systemctl restart matrix-synapse
 
-    # --- پایان ---
-    echo -e "${GREEN}======================================================${NC}"
-    echo -e "${GREEN}                 نصب با موفقیت انجام شد               ${NC}"
-    echo -e "${GREEN}======================================================${NC}"
-    echo ""
-    echo -e "بررسی وضعیت نهایی:"
-    curl -k "https://$DOMAIN_CHAT/_matrix/client/versions"
-    echo ""
-    echo -e "${YELLOW}آدرس‌ها:${NC}"
-    echo -e "Element Web: https://$DOMAIN_APP"
-    echo -e "Homeserver:  https://$DOMAIN_CHAT"
-    echo ""
-    echo -e "${YELLOW}نکته:${NC} پورت‌های 80, 443, 3478, 5349, و رنج 49160-49200 را در فایروال باز کنید."
-    echo ""
-    read -p "برای بازگشت به منو اینتر بزنید..."
+  # --- پایان ---
+  echo -e "${GREEN}======================================================${NC}"
+  echo -e "${GREEN}                 نصب با موفقیت انجام شد               ${NC}"
+  echo -e "${GREEN}======================================================${NC}"
+  echo ""
+  echo -e "بررسی وضعیت نهایی:"
+  curl -k "https://$DOMAIN_CHAT/_matrix/client/versions"
+  echo ""
+  echo -e "${YELLOW}آدرس‌ها:${NC}"
+  echo -e "Element Web: https://$DOMAIN_APP"
+  echo -e "Homeserver:  https://$DOMAIN_CHAT"
+  echo ""
+  echo -e "${YELLOW}نکته:${NC} پورت‌های 80, 443, 3478, 5349, و رنج 49160-49200 را در فایروال باز کنید."
 }
 
-# --- گزینه 2: تنظیم توکن ---
-do_set_token() {
-    clear
-    echo -e "${RED}======================================================${NC}"
-    echo -e "${RED}            هشدار مهم قبل از تغییر توکن              ${NC}"
-    echo -e "${RED}======================================================${NC}"
-    echo ""
-    echo -e "${YELLOW}توجه:${NC} با فعال کردن این گزینه، ثبت نام در نرم‌افزار بدون توکن امکان‌پذیر نخواهد بود."
-    echo -e "کاربران هنگام ثبت نام ملزم به وارد کردن توکن خواهند بود."
-    echo ""
-    read -p "آیا مطمئن هستید؟ (y/n): " confirm_token
-    if [[ $confirm_token != "y" ]]; then
-        echo "عملیات لغو شد."
-        read -p "برای بازگشت به منو اینتر بزنید..."
-        return
-    fi
 
-    echo -e "\033[0;33m>>> در حال اصلاح فایل کانفیگ...\033[0m"
-    # در اینجا فرض بر این است که REG_SECRET از قبل وجود دارد یا یک مقدار جدید می‌گیریم
-    # اگر فایل کانفیگ موجود است، سکرت فعلی را حفظ می‌کنیم، در غیر این صورت جدید می‌سازیم
-    if [ -f /etc/matrix-synapse/conf.d/registration.yaml ]; then
-        CURRENT_SECRET=$(grep "registration_shared_secret" /etc/matrix-synapse/conf.d/registration.yaml | cut -d'"' -f2)
-        if [ -z "$CURRENT_SECRET" ]; then
-            REG_SECRET=$(openssl rand -hex 32)
-        else
-            REG_SECRET="$CURRENT_SECRET"
-        fi
-    else
-        REG_SECRET=$(openssl rand -hex 32)
-    fi
+# ==========================================
+# تابع 2: تنظیم توکن برای ثبت نام (اضافه شده)
+# ==========================================
+setup_token() {
+  echo -e "${RED}اخطار مهم: با فعال‌سازی ثبت‌نام با توکن، ممکن است فرآیند ثبت‌نام در کلاینت‌ها و نرم‌افزارها با ارور مواجه شود!${NC}"
+  read -p "آیا از ادامه این عملیات اطمینان دارید؟ (y/n): " CONFIRM_TOKEN
+  if [[ "$CONFIRM_TOKEN" != "y" ]]; then
+    echo "عملیات لغو شد."
+    exit 0
+  fi
 
-    cat <<EOF > /etc/matrix-synapse/conf.d/registration.yaml
+  read -p "لطفاً توکن دلخواه خود را برای ثبت نام وارد کنید (مثلاً mySecret123): " USER_TOKEN
+  
+  if [ -z "$USER_TOKEN" ]; then
+      echo -e "${RED}خطا: توکن نمی‌تواند خالی باشد!${NC}"
+      exit 1
+  fi
+
+  # 1. تنظیم فایل کانفیگ (بازنویسی خودکار)
+  echo -e "\033[0;33m>>> در حال اصلاح فایل کانفیگ...\033[0m"
+  REG_SECRET=$(openssl rand -hex 32)
+  
+cat <<EOF > /etc/matrix-synapse/conf.d/registration.yaml
 enable_registration: true
 registration_requires_token: true
 registration_shared_secret: "$REG_SECRET"
 EOF
 
-    # 2. ریستارت سرویس برای اعمال تغییرات
-    echo -e "\033[0;33m>>> در حال ریستارت سرویس (چند ثانیه صبر کنید)...\033[0m"
-    systemctl restart matrix-synapse
-    sleep 5
+  # 2. ریستارت سرویس برای اعمال تغییرات
+  echo -e "\033[0;33m>>> در حال ریستارت سرویس (چند ثانیه صبر کنید)...\033[0m"
+  systemctl restart matrix-synapse
+  sleep 5
 
-    # 3. کاشتن توکن piggy در دیتابیس با پایتون
-    echo -e "\033[0;33m>>> در حال اضافه کردن توکن piggy...\033[0m"
-    python3 -c "
+  # 3. کاشتن توکن کاربر در دیتابیس با پایتون
+  echo -e "\033[0;33m>>> در حال اضافه کردن توکن $USER_TOKEN...\033[0m"
+  python3 -c "
 import sqlite3
 import os
 import sys
@@ -437,87 +410,79 @@ try:
     con = sqlite3.connect(db_path)
     cur = con.cursor()
     # اگر قبلا هست پاک کن تا تکراری نشه
-    cur.execute(\"DELETE FROM registration_tokens WHERE token='piggy'\")
+    cur.execute(\"DELETE FROM registration_tokens WHERE token='$USER_TOKEN'\")
     # توکن جدید رو بکار
-    cur.execute(\"INSERT INTO registration_tokens (token, uses_allowed, pending, completed) VALUES ('piggy', NULL, 0, 0)\")
+    cur.execute(\"INSERT INTO registration_tokens (token, uses_allowed, pending, completed) VALUES ('$USER_TOKEN', NULL, 0, 0)\")
     con.commit()
     con.close()
-    print('\033[0;32m>>> عالی! توکن piggy با موفقیت ساخته و فعال شد.\033[0m')
+    print('\033[0;32m>>> عالی! توکن $USER_TOKEN با موفقیت ساخته و فعال شد.\033[0m')
 except Exception as e:
     print(f'\033[0;31mخطا در دیتابیس: {e}\033[0m')
 "
 
-    echo -e "\033[0;32m--- عملیات تمام شد ---\033[0m"
-    echo ""
-    read -p "برای بازگشت به منو اینتر بزنید..."
+  echo -e "\033[0;32m--- عملیات تمام شد ---\033[0m"
 }
 
-# --- گزینه 3: حذف کامل ---
-do_uninstall() {
-    clear
-    echo -e "${RED}======================================================${NC}"
-    echo -e "${RED}                  حذف کامل نصب                        ${NC}"
-    echo -e "${RED}======================================================${NC}"
-    echo ""
-    echo -e "${YELLOW}هشدار:${NC} این عملیات تمام فایل‌های کانفیگ، دیتابیس‌ها و پکیج‌های نصب شده را حذف می‌کند."
-    echo -e "این عملیات غیرقابل بازگشت است."
-    echo ""
-    read -p "آیا مطمئن هستید؟ (بله/خیر): " confirm_uninstall
-    if [[ $confirm_uninstall != "بله" && $confirm_uninstall != "yes" ]]; then
-        echo "عملیات لغو شد."
-        read -p "برای بازگشت به منو اینتر بزنید..."
-        return
-    fi
+# ==========================================
+# تابع 3: حذف کامل (اضافه شده)
+# ==========================================
+uninstall_all() {
+  echo -e "${RED}اخطار: این عملیات تمام اجزای نصب شده (Synapse، Element، Coturn، کانفیگ‌ها و دیتابیس‌ها) را به طور کامل حذف می‌کند!${NC}"
+  read -p "آیا از حذف کامل اطمینان دارید؟ (y/n): " CONFIRM_UNINSTALL
+  if [[ "$CONFIRM_UNINSTALL" != "y" ]]; then
+    echo "حذف لغو شد."
+    exit 0
+  fi
 
-    echo -e "${YELLOW}در حال توقف سرویس‌ها...${NC}"
-    systemctl stop matrix-synapse || true
-    systemctl stop nginx || true
-    systemctl stop coturn || true
+  echo -e "${YELLOW}در حال متوقف کردن سرویس‌ها...${NC}"
+  systemctl stop matrix-synapse coturn nginx || true
 
-    echo -e "${YELLOW}در حال حذف پکیج‌ها...${NC}"
-    apt remove --purge -y matrix-synapse-py3 nginx coturn certbot python3-certbot-nginx || true
-    apt autoremove -y || true
+  echo -e "${YELLOW}در حال حذف پکیج‌ها...${NC}"
+  apt-get purge -y matrix-synapse-py3 coturn || true
+  apt-get autoremove -y || true
 
-    echo -e "${YELLOW}در حال حذف فایل‌ها و پوشه‌ها...${NC}"
-    rm -rf /etc/matrix-synapse
-    rm -rf /var/lib/matrix-synapse
-    rm -rf /var/www/element
-    rm -f /etc/nginx/sites-available/matrix.conf
-    rm -f /etc/nginx/sites-available/element.conf
-    rm -f /etc/nginx/sites-available/matrix-wellknown.conf
-    rm -f /etc/nginx/sites-enabled/matrix.conf
-    rm -f /etc/nginx/sites-enabled/element.conf
-    rm -f /etc/nginx/sites-enabled/matrix-wellknown.conf
-    rm -f /etc/turnserver.conf
-    rm -rf /etc/letsencrypt
-    
-    # بازگرداندن دیفالت انگینکس اگر نیاز بود (اختیاری)
-    # ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default 2>/dev/null || true
+  echo -e "${YELLOW}در حال حذف فایل‌ها و دایرکتوری‌ها...${NC}"
+  rm -rf /etc/matrix-synapse
+  rm -rf /var/lib/matrix-synapse
+  rm -rf /var/www/element
+  rm -f /etc/nginx/sites-available/matrix.conf /etc/nginx/sites-enabled/matrix.conf
+  rm -f /etc/nginx/sites-available/element.conf /etc/nginx/sites-enabled/element.conf
+  rm -f /etc/nginx/sites-available/matrix-wellknown.conf /etc/nginx/sites-enabled/matrix-wellknown.conf
+  rm -f /etc/turnserver.conf*
 
-    echo -e "${GREEN}حذف با موفقیت انجام شد.${NC}"
-    read -p "برای بازگشت به منو اینتر بزنید..."
+  echo -e "${YELLOW}ری‌استارت Nginx...${NC}"
+  systemctl restart nginx || true
+
+  echo -e "${GREEN}عملیات حذف با موفقیت انجام شد.${NC}"
 }
 
-# --- حلقه اصلی منو ---
-while true; do
-    show_menu
-    case $choice in
-        1)
-            do_install
-            ;;
-        2)
-            do_set_token
-            ;;
-        3)
-            do_uninstall
-            ;;
-        0)
-            echo "خروج از اسکریپت..."
-            exit 0
-            ;;
-        *)
-            echo -e "${RED}گزینه نامعتبر است. لطفاً دوباره تلاش کنید.${NC}"
-            sleep 2
-            ;;
-    esac
-done
+# ==========================================
+# منوی اصلی نرم افزار
+# ==========================================
+echo -e "${YELLOW}لطفاً یک گزینه را انتخاب کنید:${NC}"
+echo "1) نصب کامل (Matrix + Element + Coturn)"
+echo "2) افزودن توکن ثبت‌نام (اخطار: ممکن است در اپلیکیشن‌ها ارور دهد)"
+echo "3) حذف کامل نصب"
+echo "0) خروج"
+echo ""
+read -p "انتخاب شما: " MENU_CHOICE
+
+case $MENU_CHOICE in
+  1)
+    install_all
+    ;;
+  2)
+    setup_token
+    ;;
+  3)
+    uninstall_all
+    ;;
+  0)
+    echo -e "${GREEN}خروج از اسکریپت.${NC}"
+    exit 0
+    ;;
+  *)
+    echo -e "${RED}گزینه وارد شده نامعتبر است!${NC}"
+    exit 1
+    ;;
+esac
