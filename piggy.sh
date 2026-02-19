@@ -166,7 +166,7 @@ EOF
         echo "در حال پیدا کردن نسخه آخر..."
 
         # 1. دریافت لینک نهایی (Redirect) صفحه آخرین ورژن
-        REDIRECT_URL=$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/vector-im/element-web/releases/latest      )
+        REDIRECT_URL=$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/vector-im/element-web/releases/latest)
 
         # 2. استخراج نام ورژن از انتهای لینک (مثلاً v1.11.86)
         VERSION=$(basename "$REDIRECT_URL")
@@ -218,8 +218,8 @@ EOF
   "disable_custom_urls": false,
   "disable_guests": true,
   "brand": "Element",
-  "integrations_ui_url": "https://scalar.vector.im/      ",
-  "integrations_rest_url": "https://scalar.vector.im/api      ",
+  "integrations_ui_url": "https://scalar.vector.im/",
+  "integrations_rest_url": "https://scalar.vector.im/api",
   "enable_presence_by_hs_url": {
     "https://$DOMAIN_CHAT": true
   }
