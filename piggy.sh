@@ -173,7 +173,7 @@ EOF
         echo "نسخه پیدا شد: $VERSION"
 
         # 3. ساخت لینک دانلود
-        DOWNLOAD_LINK="https://github.com/vector-im/element-web/releases/download/      $VERSION/element-$VERSION.tar.gz"
+        DOWNLOAD_LINK="https://github.com/vector-im/element-web/releases/download/$VERSION/element-$VERSION.tar.gz"
         echo "لینک دانلود: $DOWNLOAD_LINK"
 
         # 4. دانلود فایل
