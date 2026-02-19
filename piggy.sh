@@ -32,9 +32,6 @@ read -p "لطفاً ساب‌دامین المنت را وارد کنید (مث�
 read -p "آدرس IP پابلیک سرور را وارد کنید: " SERVER_IP
 read -p "ایمیل خود را برای دریافت گواهی SSL وارد کنید: " EMAIL_ADDR
 
-# ✅ تغییر دوم (قسمت 1): درخواست توکن از کاربر
-read -p "لطفاً Registration Token مورد نظر را وارد کنید (مثلاً piggy): " REG_TOKEN
-
 echo ""
 echo -e "اطلاعات وارد شده:"
 echo -e "Root Domain: ${GREEN}$DOMAIN_ROOT${NC}"
@@ -42,7 +39,6 @@ echo -e "Chat Domain: ${GREEN}$DOMAIN_CHAT${NC}"
 echo -e "App Domain:  ${GREEN}$DOMAIN_APP${NC}"
 echo -e "Server IP:   ${GREEN}$SERVER_IP${NC}"
 echo -e "Email:       ${GREEN}$EMAIL_ADDR${NC}"
-echo -e "Token:       ${GREEN}$REG_TOKEN${NC}"
 echo ""
 
 read -p "آیا اطلاعات بالا صحیح است؟ (y/n): " CONFIRM
@@ -54,7 +50,7 @@ fi
 # --- آپدیت و نصب پیش‌نیازها ---
 echo -e "${YELLOW}\nمرحله 2: آپدیت سیستم و نصب پیش‌نیازها...${NC}"
 apt update
-apt install -y curl wget gnupg lsb-release nginx certbot python3-certbot-nginx coturn sqlite3 python3
+apt install -y curl wget gnupg lsb-release nginx certbot python3-certbot-nginx coturn
 
 # --- نصب Synapse ---
 echo -e "${YELLOW}\nمرحله 3: نصب Synapse...${NC}"
@@ -68,49 +64,15 @@ apt update
 apt install -y matrix-synapse-py3
 
 # --- کانفیگ Registration ---
-echo -e "${YELLOW}\nمرحله 4: تنظیم Registration Shared Secret و Token...${NC}"
-
+echo -e "${YELLOW}\nمرحله 4: تنظیم Registration Shared Secret...${NC}"
+# تولید خودکار کد مخفی
 REG_SECRET=$(openssl rand -hex 32)
 echo -e "Secret تولید شده: ${GREEN}$REG_SECRET${NC}"
 
 cat <<EOF > /etc/matrix-synapse/conf.d/registration.yaml
 enable_registration: true
 enable_registration_without_verification: true
-registration_requires_token: true
 registration_shared_secret: "$REG_SECRET"
-EOF
-
-systemctl restart matrix-synapse
-sleep 5
-
-# ✅ تغییر دوم (قسمت 2): اضافه کردن توکن به دیتابیس
-echo -e "${YELLOW}در حال ثبت Registration Token در دیتابیس...${NC}"
-
-python3 - <<EOF
-import sqlite3
-import os
-import sys
-
-db_path = '/var/lib/matrix-synapse/homeserver.db'
-token = "$REG_TOKEN"
-
-if not os.path.exists(db_path):
-    print("خطا: دیتابیس پیدا نشد!")
-    sys.exit(1)
-
-con = sqlite3.connect(db_path)
-cur = con.cursor()
-
-cur.execute("DELETE FROM registration_tokens WHERE token=?", (token,))
-cur.execute(
-    "INSERT INTO registration_tokens (token, uses_allowed, pending, completed) VALUES (?, NULL, 0, 0)",
-    (token,)
-)
-
-con.commit()
-con.close()
-
-print("توکن با موفقیت ثبت شد:", token)
 EOF
 
 # --- ریستارت و ساخت یوزر ادمین ---
@@ -118,6 +80,7 @@ echo -e "${YELLOW}\nمرحله 5: راه‌اندازی سرویس و ساخت �
 systemctl restart matrix-synapse
 
 echo -e "${GREEN}اکنون باید یک یوزر ادمین بسازید.${NC}"
+echo -e "${YELLOW}توجه: وقتی از شما خواسته شد، یک نام کاربری و رمز عبور وارد کنید و برای گزینه Admin عدد 1 (Yes) را بزنید.${NC}"
 read -p "برای شروع ساخت یوزر ادمین اینتر بزنید..." DUMMY
 
 register_new_matrix_user -c /etc/matrix-synapse/conf.d/registration.yaml http://localhost:8008
@@ -126,6 +89,7 @@ register_new_matrix_user -c /etc/matrix-synapse/conf.d/registration.yaml http://
 echo -e "${YELLOW}\nمرحله 6: دریافت گواهی SSL...${NC}"
 systemctl stop nginx
 
+# نکته: دامین چت اولین دامین است تا مسیر سرتیفیکیت بر اساس آن ساخته شود
 certbot certonly --standalone \
   --non-interactive --agree-tos -m "$EMAIL_ADDR" \
   -d "$DOMAIN_CHAT" \
@@ -164,23 +128,55 @@ EOF
 
 ln -s /etc/nginx/sites-available/matrix.conf /etc/nginx/sites-enabled/matrix.conf
 
-# --- نصب Element Web ---
+# --- نصب Element Web (Dynamic Version) ---
 echo -e "${YELLOW}\nمرحله 8: نصب Element Web (آخرین نسخه)...${NC}"
 cd /var/www
 
 if [ ! -d "/var/www/element" ]; then
+    echo "در حال پیدا کردن نسخه آخر..."
 
-REDIRECT_URL=$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/vector-im/element-web/releases/latest)
-VERSION=$(basename "$REDIRECT_URL")
+    # 1. دریافت لینک نهایی (Redirect) صفحه آخرین ورژن
+    REDIRECT_URL=$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/vector-im/element-web/releases/latest)
 
-wget "https://github.com/vector-im/element-web/releases/download/$VERSION/element-$VERSION.tar.gz" -O element-latest.tar.gz
+    # 2. استخراج نام ورژن از انتهای لینک (مثلاً v1.11.86)
+    VERSION=$(basename "$REDIRECT_URL")
+    echo "نسخه پیدا شد: $VERSION"
 
-tar -xvf element-latest.tar.gz > /dev/null
-mv element-$VERSION element
-rm element-latest.tar.gz
+    # 3. ساخت لینک دانلود
+    DOWNLOAD_LINK="https://github.com/vector-im/element-web/releases/download/$VERSION/element-$VERSION.tar.gz"
+    echo "لینک دانلود: $DOWNLOAD_LINK"
 
+    # 4. دانلود فایل
+    wget "$DOWNLOAD_LINK" -O element-latest.tar.gz
+
+    if [ -f "element-latest.tar.gz" ]; then
+        echo "✅ دانلود با موفقیت انجام شد، در حال اکسترکت..."
+        
+        tar -xvf element-latest.tar.gz > /dev/null
+        
+        # پیدا کردن نام پوشه اکسترکت شده (معمولا element-vX.X.X) و تغییر نام به element
+        EXTRACTED_DIR="element-$VERSION"
+        
+        if [ -d "$EXTRACTED_DIR" ]; then
+            mv "$EXTRACTED_DIR" element
+            echo "✅ پوشه به 'element' تغییر نام یافت."
+        else
+            # اگر فرمت نام پوشه متفاوت بود، اولین پوشه element-* را پیدا کن
+            echo "⚠️ نام پوشه استاندارد نبود، تلاش برای پیدا کردن پوشه..."
+            mv element-v* element 2>/dev/null
+        fi
+
+        # پاکسازی فایل فشرده
+        rm element-latest.tar.gz
+    else
+        echo "❌ دانلود انجام نشد. اسکریپت متوقف می‌شود."
+        exit 1
+    fi
+else
+    echo "پوشه Element از قبل وجود دارد، رد شدن از دانلود..."
 fi
 
+# تنظیم کانفیگ المنت
 cat <<EOF > /var/www/element/config.json
 {
   "default_server_config": {
@@ -188,106 +184,163 @@ cat <<EOF > /var/www/element/config.json
       "base_url": "https://$DOMAIN_CHAT",
       "server_name": "$DOMAIN_ROOT"
     }
+  },
+  "disable_custom_urls": false,
+  "disable_guests": true,
+  "brand": "Element",
+  "integrations_ui_url": "https://scalar.vector.im/",
+  "integrations_rest_url": "https://scalar.vector.im/api",
+  "enable_presence_by_hs_url": {
+    "https://$DOMAIN_CHAT": true
   }
 }
 EOF
 
-# --- کانفیگ Element Nginx ---
+# --- کانفیگ Nginx برای Element ---
 echo -e "${YELLOW}\nمرحله 9: تنظیم Nginx برای Element...${NC}"
 
 cat <<EOF > /etc/nginx/sites-available/element.conf
 server {
-listen 80;
-server_name $DOMAIN_APP;
-return 301 https://\$host\$request_uri;
+    listen 80;
+    server_name $DOMAIN_APP;
+    return 301 https://\$host\$request_uri;
 }
 
 server {
-listen 443 ssl http2;
-server_name $DOMAIN_APP;
+    listen 443 ssl http2;
+    server_name $DOMAIN_APP;
 
-ssl_certificate /etc/letsencrypt/live/$DOMAIN_CHAT/fullchain.pem;
-ssl_certificate_key /etc/letsencrypt/live/$DOMAIN_CHAT/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN_CHAT/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN_CHAT/privkey.pem;
 
-root /var/www/element;
-index index.html;
+    root /var/www/element;
+    index index.html;
+
+    location / {
+        try_files \$uri \$uri/ =404;
+    }
 }
 EOF
 
 ln -s /etc/nginx/sites-available/element.conf /etc/nginx/sites-enabled/element.conf
 
-# --- Well-known ---
-echo -e "${YELLOW}\nمرحله 10: تنظیم Well-known...${NC}"
+# --- کانفیگ Nginx برای Well-known ---
+echo -e "${YELLOW}\nمرحله 10: تنظیم Nginx برای Well-known...${NC}"
 
+# نام فایل کانفیگ به matrix-wellknown.conf تغییر یافت تا عمومی باشد
 cat <<EOF > /etc/nginx/sites-available/matrix-wellknown.conf
 server {
-listen 443 ssl;
-server_name $DOMAIN_ROOT;
-
-ssl_certificate /etc/letsencrypt/live/$DOMAIN_CHAT/fullchain.pem;
-ssl_certificate_key /etc/letsencrypt/live/$DOMAIN_CHAT/privkey.pem;
-
-location /.well-known/matrix/server {
-return 200 '{"m.server":"$DOMAIN_CHAT:443"}';
+    listen 80;
+    server_name $DOMAIN_ROOT;
+    return 301 https://\$host\$request_uri;
 }
 
-location /.well-known/matrix/client {
-return 200 '{"m.homeserver":{"base_url":"https://$DOMAIN_CHAT"}}';
-}
+server {
+    listen 443 ssl http2;
+    server_name $DOMAIN_ROOT;
+
+    ssl_certificate /etc/letsencrypt/live/$DOMAIN_CHAT/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN_CHAT/privkey.pem;
+
+    location = /.well-known/matrix/client {
+        add_header Content-Type application/json;
+        return 200 '{"m.homeserver":{"base_url":"https://$DOMAIN_CHAT"}}';
+    }
+
+    location = /.well-known/matrix/server {
+        add_header Content-Type application/json;
+        return 200 '{"m.server":"$DOMAIN_CHAT:443"}';
+    }
+
+    location / {
+        return 404;
+    }
 }
 EOF
 
-ln -s /etc/nginx/sites-available/matrix-wellknown.conf /etc/nginx/sites-enabled/
+ln -s /etc/nginx/sites-available/matrix-wellknown.conf /etc/nginx/sites-enabled/matrix-wellknown.conf
 
+# حذف دیفالت و ریلود
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 
 # --- تنظیم coturn ---
-echo -e "${YELLOW}\nمرحله 11: تنظیم TURN Server...${NC}"
+echo -e "${YELLOW}\nمرحله 11: تنظیم و فعال‌سازی TURN Server (Coturn)...${NC}"
 
-sed -i 's/#TURNSERVER_ENABLED=1/TURNSERVER_ENABLED=1/' /etc/default/coturn
+# فعال سازی در دیفالت
+sed -i 's/#TURNSERVER_ENABLED=1/TURNSERVER_ENABLED=1/g' /etc/default/coturn
+# اگر کامنت نشده بود و صرفا نبود:
+if ! grep -q "TURNSERVER_ENABLED=1" /etc/default/coturn; then
+    echo "TURNSERVER_ENABLED=1" >> /etc/default/coturn
+fi
 
+# تولید secret برای turn
 TURN_SECRET=$(openssl rand -hex 32)
+echo -e "TURN Secret تولید شده: ${GREEN}$TURN_SECRET${NC}"
+
+mv /etc/turnserver.conf /etc/turnserver.conf.backup 2>/dev/null || true
 
 cat <<EOF > /etc/turnserver.conf
+syslog
+no-rfc5780
+no-stun-backward-compatibility
+response-origin-only-with-rfc5780
+
 listening-port=3478
 tls-listening-port=5349
+
+listening-ip=0.0.0.0
 external-ip=$SERVER_IP
+
 realm=$DOMAIN_CHAT
 server-name=$DOMAIN_CHAT
-use-auth-secret
-static-auth-secret=$TURN_SECRET
+fingerprint
+
 cert=/etc/letsencrypt/live/$DOMAIN_CHAT/fullchain.pem
 pkey=/etc/letsencrypt/live/$DOMAIN_CHAT/privkey.pem
+
+use-auth-secret
+static-auth-secret=$TURN_SECRET
+
+min-port=49160
+max-port=49200
+
+total-quota=100
+bps-capacity=0
+
+no-loopback-peers
+no-multicast-peers
+
+verbose
 EOF
-
-# ✅ تغییر اول: اصلاح دسترسی SSL برای turnserver
-echo -e "${YELLOW}اصلاح دسترسی SSL برای TURN...${NC}"
-
-chown -R turnserver:turnserver /etc/letsencrypt/archive/
-chown -R turnserver:turnserver /etc/letsencrypt/live/
-
-chmod 755 /etc/letsencrypt/live/
-chmod 755 /etc/letsencrypt/archive/
 
 systemctl restart coturn
 
 # --- اتصال TURN به Synapse ---
-echo -e "${YELLOW}\nمرحله 12: اتصال TURN به Synapse...${NC}"
+echo -e "${YELLOW}\nمرحله 12: معرفی TURN به Synapse...${NC}"
 
 cat <<EOF > /etc/matrix-synapse/conf.d/turn.yaml
 turn_uris:
   - "turn:$DOMAIN_CHAT:3478?transport=udp"
   - "turns:$DOMAIN_CHAT:5349?transport=tcp"
+
 turn_shared_secret: "$TURN_SECRET"
+turn_user_lifetime: 86400000
+turn_allow_guests: false
 EOF
 
 systemctl restart matrix-synapse
 
 # --- پایان ---
 echo -e "${GREEN}======================================================${NC}"
-echo -e "${GREEN}نصب کامل شد${NC}"
+echo -e "${GREEN}                 نصب با موفقیت انجام شد               ${NC}"
 echo -e "${GREEN}======================================================${NC}"
-echo "Element: https://$DOMAIN_APP"
-echo "Homeserver: https://$DOMAIN_CHAT"
-echo "Registration Token: $REG_TOKEN"
+echo ""
+echo -e "بررسی وضعیت نهایی:"
+curl -k "https://$DOMAIN_CHAT/_matrix/client/versions"
+echo ""
+echo -e "${YELLOW}آدرس‌ها:${NC}"
+echo -e "Element Web: https://$DOMAIN_APP"
+echo -e "Homeserver:  https://$DOMAIN_CHAT"
+echo ""
+echo -e "${YELLOW}نکته:${NC} پورت‌های 80, 443, 3478, 5349, و رنج 49160-49200 را در فایروال باز کنید."
